@@ -62,6 +62,8 @@ class Si4703_Breakout
 	 
 	bool getBlocks(uint16_t* buff,long timeout );
 
+	void getBlocksInterrupt(uint16_t* buff);
+
   private:
     int  _resetPin;
 	int  _sdioPin;
@@ -109,6 +111,7 @@ class Si4703_Breakout
 	//Register 0x04 - SYSCONFIG1
 	static const uint16_t  RDS = 12;
 	static const uint16_t  DE = 11;
+	static const uint16_t  RDS_INTERRUPT = 15;
 
 	//Register 0x05 - SYSCONFIG2
 	static const uint16_t  SPACE1 = 5;
@@ -128,6 +131,9 @@ class Si4703_Breakout
 
 	//identifier class
 	static const uint16_t IDENTIFIER =31;
+
+	//interrupt flag 
+	bool RDS_INTERRUPT_FLAG = true;
 };
 
 #endif

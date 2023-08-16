@@ -7,28 +7,20 @@ uint16_t operation(uint16_t A, uint16_t B, uint16_t C)
     return ((A&B) | (B)&(A^C) );
 }
 
- 
-void process_read::check_timeout(bool flag){
 
-    long current_point=millis();
-
-    if (flag==false){
-        if (current_point>set_point){
-            FLAG_BLOCKS = false; 
-            countFailedRDS++;
-            }    
+bool process_read::check_valid(void)
+{
+    if ((millis()-ultimate_RDS)>timeout)
+    {   
+        signal_RDS = 0;
+        return false;
     }
-    else{
-        set_point=millis() + timeout;
-        FLAG_BLOCKS = true;
-        countSucessRDS++;
+    else
+    {
+        return true;
     }
-    esp_task_wdt_reset();
-
-    
-
 }
-
+ 
 
 void process_read:: check_RDS(void){
     
@@ -38,10 +30,15 @@ void process_read:: check_RDS(void){
         signal_RDS = (countSucessRDS)/(DEFINE_RDS_PER_SECOND*3)*100;
         
         set_point_RDS = millis() + second*3;
+        
+        if (signal_RDS>100)
+        {
+            signal_RDS = 100;
+        }
         countSucessRDS=0;
     }
 
-     esp_task_wdt_reset();
+ 
    
 
     
@@ -58,6 +55,8 @@ void process_read :: reset(void){
 
         FLAG_NAME=false;
         FLAG_BLOCKS=false;
+        ultimate_RDS = 0;
+        signal_RDS = 0;
         FLAG_RADIO_TEXT = false; 
 
         for (int ind=0;ind<64;ind++){
@@ -115,8 +114,22 @@ void process_read :: get_name(void){
 }
 
 
-void process_read:: set_block(uint16_t* block){
+void process_read:: insert_test(float lat_, float lon_,float rad_)
+{
+    lat = lat_;
+    lon = lon_;
+    radio = rad_;
 
+    verify_emergency(true);
+
+}
+
+void process_read:: set_block(uint16_t* block){
+    //--------------- new block ---------------
+    FLAG_BLOCKS = true;
+    countSucessRDS++;
+    ultimate_RDS = millis();
+    //-------------------------------------
 
     BLOCK_A =   block[BLOCKA];
     BLOCK_B =   block[BLOCKB];
@@ -124,14 +137,11 @@ void process_read:: set_block(uint16_t* block){
     BLOCK_D =   block[BLOCKD];
 
     get_name();
-    esp_task_wdt_reset();
 
-    get_radiotext();
-    esp_task_wdt_reset();
+    get_radiotext(); 
 
     check_RDS();
-    esp_task_wdt_reset();
-
+ 
      
 
 }
@@ -228,7 +238,7 @@ float calcularModa(float array[], int size) {
     }
   }
 
-  if ((maxCount==1) or (maxCount< 0.5*size)) return -1;
+  if ((maxCount==1) or (maxCount< 0.5*size)) return -1000;
   
 
   return moda;
@@ -313,7 +323,7 @@ void process_read :: get_error_bit_per_bit(float array[])
      
 
 }
-void process_read :: verify_emergency(void)
+void process_read :: verify_emergency( bool test_mode)
 {
     /*
     Esta aplicación verifica si hay una emergencia
@@ -322,12 +332,17 @@ void process_read :: verify_emergency(void)
         -> Hay dos señales de emergencia pero con valores diferentes
 
     */  
-
    int index = return_index(emergency_signal,10);
+   Serial.println("Indice elemento:");
+   Serial.println(index);
+
+
+    //-------------  Insertamos nuevo valor ----------------------------//
 
     latitud_array[index] = lat;
     longitud_array[index] =lon;
     radio_array[index]  = radio;
+    emergency_signal[index] = true;
 
 
     //-------------------- logica--------------------
@@ -335,15 +350,25 @@ void process_read :: verify_emergency(void)
    {
     //solo hay una señal de emergencia
     // se espera 1.5 segundos para confirmar emergencia 
+    if (test_mode)
+    {
+        timeout_emergency = millis() + 50*1000;    
+    }
+    else
+    {
+        timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+    }
 
-    timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
     return;
 
    }
+
+
+
    if (index==1)
    {   
     //verificamos si el timeout venció 
-    if (millis()-timeout_emergency>0)
+    if (millis()>timeout_emergency)
     {
         // reseteamos todo
         reset_emergency();
@@ -351,10 +376,31 @@ void process_read :: verify_emergency(void)
         latitud_array[0] = lat;
         longitud_array[0] = lon;
         radio_array[0]  = radio;       
+        emergency_signal[0] = true;
 
-        timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
 
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
         return;
+    }
+    else
+    {
+        //actualizamos timeout
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
+
     }
     
     //hay dos elementos
@@ -380,6 +426,9 @@ void process_read :: verify_emergency(void)
         EMERGENCY_SIGNAL = true;
         return;
     }
+    else{
+        Serial.println("Hay un elemento desigual");
+    }
 
    }
    else if (index==2)
@@ -387,6 +436,44 @@ void process_read :: verify_emergency(void)
     // hay tres elementos 
     // si no lanzó, es porque hay elementos desiguales
     // verificaremos par en par
+
+    //verificamos si el timeout venció 
+    if (millis()>timeout_emergency)
+    {
+        // reseteamos todo
+        reset_emergency();
+        //volvemos a insertar los nuevos valores y esperamos otro timeout
+        latitud_array[0] = lat;
+        longitud_array[0] = lon;
+        radio_array[0]  = radio;       
+        emergency_signal[0] = true;
+
+
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
+        return;
+    }
+    else
+    {
+        //reiniciamos timeout
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
+    }
+    //----------------------------------------------------------------------------------------------
+
+
     bool flag_check = true;
 
     if (!((latitud_array[index-1]==latitud_array[index]) or (latitud_array[index-2]==latitud_array[index-1]) or (latitud_array[index]==latitud_array[index-2])))       flag_check = false;
@@ -398,6 +485,7 @@ void process_read :: verify_emergency(void)
     {
     //comprobamos el error de bit a bit
     float array[3];
+    if (!(test_mode)){
      get_error_bit_per_bit(array);
      latitud_emergency = array[0];
      longitud_emergency = array[1];
@@ -406,7 +494,7 @@ void process_read :: verify_emergency(void)
 
     reset_emergency();
     EMERGENCY_SIGNAL = true;
-
+    }
     return;
 
     }
@@ -415,20 +503,20 @@ void process_read :: verify_emergency(void)
         //hubo dos datos validos
 
         //latitud
-        if (latitud_array[index-1]==latitud_array[index]) latitud_emergency = latitud_array[index];
-        if (latitud_array[index-2]==latitud_array[index-1]) latitud_emergency = latitud_array[index-1];
-        if (latitud_array[index]==latitud_array[index-2])  latitud_emergency = latitud_array[index];
+        if (latitud_array[index-1]  ==  latitud_array[index])       latitud_emergency = latitud_array[index];
+        if (latitud_array[index-2]  ==  latitud_array[index-1])     latitud_emergency = latitud_array[index-1];
+        if (latitud_array[index]    ==  latitud_array[index-2])     latitud_emergency = latitud_array[index];
 
         //longitud
-        if (longitud_array[index-1]==longitud_array[index]) longitud_emergency = longitud_array[index-1];
-        if (longitud_array[index-2]==longitud_array[index-1]) longitud_emergency = longitud_array[index-1];
-        if (longitud_array[index]==longitud_array[index-2]) longitud_emergency = longitud_array[index];
+        if (longitud_array[index-1] ==  longitud_array[index])      longitud_emergency = longitud_array[index-1];
+        if (longitud_array[index-2] ==  longitud_array[index-1])    longitud_emergency = longitud_array[index-1];
+        if (longitud_array[index]   ==  longitud_array[index-2])    longitud_emergency = longitud_array[index];
 
         //radio
 
-        if((radio_array[index-1]==radio_array[index])) radio_emergency = radio_array[index-1];
-        if((radio_array[index-2]==radio_array[index-1])) radio_emergency = radio_array[index-1];
-        if((radio_array[index-2]==radio_array[index])) radio_emergency = radio_array[index];
+        if((radio_array[index-1]==radio_array[index]))              radio_emergency = radio_array[index-1];
+        if((radio_array[index-2]==radio_array[index-1]))            radio_emergency = radio_array[index-1];
+        if((radio_array[index-2]==radio_array[index]))              radio_emergency = radio_array[index];
 
         reset_emergency();
         EMERGENCY_SIGNAL = true;
@@ -439,28 +527,83 @@ void process_read :: verify_emergency(void)
 
    }
 
-    // else if (index>2)
-
+    else if (index>2)
+    {
     // if (!(flag_check))
     // //sigue marcando mal
     // // verificaremos moda por moda en cada valor 
-    // {
-    //     get_moda
-    // }
+    //verificamos si el timeout venció 
+    if (millis()>timeout_emergency)
+    {
+        // reseteamos todo
+        reset_emergency();
+        //volvemos a insertar los nuevos valores y esperamos otro timeout
+        latitud_array[0] = lat;
+        longitud_array[0] = lon;
+        radio_array[0]  = radio;       
+        emergency_signal[0] = true;
+
+
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
+        return;
+    }
+    else
+    {
+        //actualizamos timeout
+        if (test_mode)
+        {
+            timeout_emergency = millis() + 50*1000;    
+        }
+        else
+        {
+            timeout_emergency = millis() + MAX_SECONDS_BETWEEN_EMERGENCY*1000;
+        }
+
+    }
+    //calculamos moda 
+
+    //latitud
+
+    float value0 = calcularModa(latitud_array,10);
+    float value1 = calcularModa(longitud_array,10);
+    float value2 = calcularModa(radio_array,10);
+
+    if ((value0==-1000) or (value1==-1000) or (value2==-1000))
+    {   //borramos los datos en caso el buffer esté lleno
+        if (index==9) {reset_emergency();}
+        return;
+    }
+    else
+    {   //activamos la señal de alarma
+        latitud_emergency = value0;
+        longitud_emergency = value1;
+        radio_emergency = value2;
+
+        reset_emergency();
+        EMERGENCY_SIGNAL = true;
+    }
+ 
+    
    
 }
 
 
 
 
-
+}
 
 // carga los valores de rds si hay alguna senal
 void process_read :: get_radiotext(void)
 {
     long diff = millis() - set_point_radiotext;
     if(FLAG_BLOCKS==true)
-
     {
         int type = get_type();
         int pty  = get_pty();
@@ -509,23 +652,7 @@ void process_read :: get_radiotext(void)
         }
 
 
-        // generamos valores aleatoriamente de lat y rad de emergencia 
 
-        {
-            latitud_emergency = -11.97;
-            lat = latitud_emergency;
-
-            longitud_emergency = -76.97;
-            lon = longitud_emergency;
-
-            radio_emergency = 100;
-            radio = radio_emergency;
-            FLAG_LONLAT = true;
-
-            EMERGENCY_SIGNAL = true;
-
-
-        }
 
 
 
@@ -622,7 +749,7 @@ void process_read :: get_radiotext(void)
                 //PROCESAMOS LA SEÑAL DE EMERGENCIA
                 //TRAMA_TOTAL = true;
 
-                verify_emergency();
+                verify_emergency(false);
             }
         
         }
@@ -709,23 +836,26 @@ void process_read :: get_radiotext(void)
             }
             return;
         }
-        else{
+        else
+        {
             return;
         }
     }
 }
 
 
-int process_read :: get_pty(void ){
-if(FLAG_BLOCKS==true)
+int process_read :: get_pty(void )
 {
-    uint16_t number = (IDENTIFIER_TYPE <<5) & (BLOCK_B);
-    number  = number >> 5;
+    if(FLAG_BLOCKS==true)
+    {
+        uint16_t number = (IDENTIFIER_TYPE <<5) & (BLOCK_B);
+        number  = number >> 5;
 
-    return int(number);
+        return int(number);
 
-}
-else {
-    return int(100);
-}
+    }
+    else 
+    {
+        return int(100);
+    }
 }

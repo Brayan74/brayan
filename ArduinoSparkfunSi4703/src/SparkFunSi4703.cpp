@@ -68,7 +68,16 @@ void Si4703_Breakout::setVolume(int volume)
   updateRegisters(); //Update
 }
 //This is only test purpose
+void Si4703_Breakout::getBlocksInterrupt(uint16_t* buff)
+  {   readRegisters();
+       
 
+      buff[0]=si4703_registers[RDSA];
+      buff[1]=si4703_registers[RDSB];
+      buff[2]=si4703_registers[RDSC];
+      buff[3]=si4703_registers[RDSD];
+      return;
+}
 bool Si4703_Breakout::getBlocks(uint16_t* buff,long timeout )
 {	long endTime = millis() + timeout;
   
@@ -182,6 +191,12 @@ void Si4703_Breakout::si4703_init()
   si4703_registers[SYSCONFIG1] |= (1<<DE); //50kHz Europe setup
   si4703_registers[SYSCONFIG2] |= (1<<SPACE0); //100kHz channel spacing for Europe
  
+  if (RDS_INTERRUPT_FLAG) 
+  {si4703_registers[SYSCONFIG1] |= (1<<RDS_INTERRUPT);// Enable Interrupt RDS GPI02
+                      // Configuramos GPIO2[1:0] = 01;
+                      si4703_registers[SYSCONFIG1] |= (1<<2);
+                      si4703_registers[SYSCONFIG1]  &= 0xFFF7 ;
+                      } 
 
   si4703_registers[SYSCONFIG2] &= 0xFFF0; //Clear volume bits
   si4703_registers[SYSCONFIG2] |= 0x0001; //Set volume to 

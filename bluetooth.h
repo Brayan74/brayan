@@ -3,10 +3,10 @@
 #include <Arduino.h>
 #include "BluetoothSerial.h"
 //BluetoothSerial SerialBT;
-
 BluetoothSerial SerialBT;
-const String device_name = "SASPe_ESP32";
 
+
+String device_name = "SASPe_ROJ";
 String bluetoothReadLine(){
     String text_received = "";
     while(SerialBT.available()){

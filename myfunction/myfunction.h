@@ -54,10 +54,17 @@ class process_read
         long set_point_radiotext=millis() + timeout_radiotext;
         long set_point_RDS= millis()+second*3;
 
-        const float DEFINE_RDS_PER_SECOND = 9;
+        const float DEFINE_RDS_PER_SECOND = 11.1;
+
+        unsigned long ultimate_RDS = 0;
+
+        
 
 
     public:
+        void insert_test(float lat_, float lon_,float rad_);
+
+        bool check_valid(void);
         char type_text  ='C';
         char buffer_ [16];
         char radio_textA[64];
@@ -133,7 +140,7 @@ class process_read
         
 
         //-------------------- Method that verify event -----------------------------//
-        void verify_emergency(void);
+        void verify_emergency(bool test_mode);
         void reset_emergency(void);
         void get_error_bit_per_bit(float array[]);
 
