@@ -481,24 +481,24 @@ void process_read :: verify_emergency( bool test_mode)
     if (!((radio_array[index-1]==radio_array[index]) or (radio_array[index-2]==radio_array[index-1]) or (radio_array[index]==radio_array[index-2])))        flag_check = false;
 
 
-    if (flag_check == false)
-    {
-    //comprobamos el error de bit a bit
-    float array[3];
-    if (!(test_mode)){
-     get_error_bit_per_bit(array);
-     latitud_emergency = array[0];
-     longitud_emergency = array[1];
-     radio_emergency = array[2];
-    //corregido los bits, lanzamos la emergencia
+    // if (flag_check == false)
+    // {
+    // //comprobamos el error de bit a bit
+    // float array[3];
+    // if (!(test_mode)){
+    //  get_error_bit_per_bit(array);
+    //  latitud_emergency = array[0];
+    //  longitud_emergency = array[1];
+    //  radio_emergency = array[2];
+    // //corregido los bits, lanzamos la emergencia
 
-    reset_emergency();
-    EMERGENCY_SIGNAL = true;
-    }
-    return;
+    // reset_emergency();
+    // EMERGENCY_SIGNAL = true;
+    // }
+    // return;
 
-    }
-    else
+    // }
+    // else
     {
         //hubo dos datos validos
 
@@ -571,9 +571,9 @@ void process_read :: verify_emergency( bool test_mode)
 
     //latitud
 
-    float value0 = calcularModa(latitud_array,10);
-    float value1 = calcularModa(longitud_array,10);
-    float value2 = calcularModa(radio_array,10);
+    float value0 = calcularModa(latitud_array,index+1);
+    float value1 = calcularModa(longitud_array,index+1);
+    float value2 = calcularModa(radio_array,index+1);
 
     if ((value0==-1000) or (value1==-1000) or (value2==-1000))
     {   //borramos los datos en caso el buffer esté lleno
@@ -588,6 +588,8 @@ void process_read :: verify_emergency( bool test_mode)
 
         reset_emergency();
         EMERGENCY_SIGNAL = true;
+
+        return;
     }
  
     

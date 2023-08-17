@@ -4,10 +4,6 @@
 
 //Nokia 5110 Display
 #include <Arduino.h>
-#include <U8x8lib.h>
-
-#ifdef U8X8_HAVE_HW_SPI
-#endif
  
 #include <WiFi.h>
 #include <SparkFunSi4703.h>
@@ -21,8 +17,12 @@
 #include "bluetooth.h"
 
 #include "esp_task_wdt.h"
-
+#include "logo.h"
 #include "rtc.h"
+#include "lcd_file.h"
+
+#include "eeprom.h"
+#include "keys.h"
  
 #define INTERRUPT_PIN 16
 // #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
@@ -35,37 +35,66 @@
 
 //--------------------------------- Define constanst ---------------------------------
 
-#define WDT_TIMEOUT 30 
+#define WDT_TIMEOUT 60
 
 SemaphoreHandle_t spiMutex;
 
 
 volatile char display_STATUS_GLOBAL = 'N';
+
+
 #include "ota_file.h"
 
 
- 
+const unsigned char bitmap_image [] PROGMEM ={
+  0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xff, 0xff, 0xfe, 
+  0x07, 0xff, 0xff, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xff, 0xfc, 0x00, 0x04, 0x01, 0xff, 0xff, 0xff, 
+  0xf0, 0xff, 0xff, 0xff, 0x88, 0x00, 0x0c, 0x00, 0x1f, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xfc, 0x08, 
+  0x00, 0x18, 0x00, 0x0f, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xf0, 0x18, 0x00, 0x18, 0x00, 0x18, 0x7f, 
+  0xff, 0xf0, 0xff, 0xff, 0x80, 0x18, 0x00, 0x10, 0x00, 0x10, 0x1f, 0xff, 0xf0, 0xff, 0xfe, 0x00, 
+  0x18, 0x00, 0x10, 0x00, 0x30, 0x03, 0xff, 0xf0, 0xff, 0xfc, 0x00, 0x18, 0x00, 0x10, 0x00, 0x30, 
+  0x01, 0xff, 0xf0, 0xff, 0xf0, 0x00, 0x18, 0x00, 0x10, 0x00, 0x10, 0x00, 0x7f, 0xf0, 0xff, 0xe0, 
+  0x00, 0x18, 0x00, 0x10, 0x00, 0x18, 0x00, 0x3f, 0xf0, 0xff, 0xff, 0x80, 0x18, 0x00, 0x18, 0x00, 
+  0x0c, 0x00, 0x1f, 0xf0, 0xff, 0x00, 0x3e, 0x08, 0x00, 0x08, 0x00, 0x06, 0x00, 0x0f, 0xf0, 0xfe, 
+  0x00, 0x00, 0xfc, 0x00, 0x0c, 0x00, 0x01, 0xc0, 0x77, 0xf0, 0xfe, 0x00, 0x00, 0x07, 0x00, 0x06, 
+  0x00, 0x00, 0x3f, 0x83, 0xf0, 0xfc, 0x00, 0x00, 0x00, 0xe0, 0x03, 0x00, 0x00, 0x00, 0x01, 0xf0, 
+  0xf8, 0x00, 0x00, 0x00, 0x1c, 0x01, 0x80, 0x00, 0x00, 0x00, 0xf0, 0xf8, 0x00, 0x00, 0x00, 0x03, 
+  0x00, 0xc0, 0x00, 0x00, 0x00, 0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x20, 0x00, 0x00, 0x00, 
+  0x70, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x30, 0x1c, 0x00, 0x00, 0x00, 0x70, 0xf3, 0xff, 0x00, 0x00, 
+  0x00, 0x0c, 0x07, 0x00, 0x00, 0x00, 0x70, 0xe0, 0x00, 0xf8, 0x00, 0x00, 0x03, 0x00, 0xe0, 0x00, 
+  0x00, 0xf0, 0xe0, 0x00, 0x07, 0x00, 0x00, 0x00, 0xc0, 0x1f, 0xc0, 0x2f, 0x70, 0xe0, 0x00, 0x00, 
+  0x70, 0x00, 0x00, 0x60, 0x00, 0x7f, 0xc0, 0x30, 0xe0, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x18, 0x00, 
+  0x00, 0x00, 0x30, 0xe0, 0x00, 0x00, 0x03, 0x80, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x30, 0xe0, 0x00, 
+  0x00, 0x00, 0xe0, 0x00, 0x06, 0x00, 0x00, 0x00, 0x70, 0xf0, 0x00, 0x00, 0x00, 0x30, 0x00, 0x01, 
+  0x00, 0x00, 0x00, 0x70, 0xfd, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x80, 0x00, 0x00, 0x70, 0xf8, 
+  0xfc, 0x00, 0x00, 0x02, 0x00, 0x00, 0x40, 0x00, 0x00, 0xf0, 0xf8, 0x03, 0xc0, 0x00, 0x01, 0x80, 
+  0x00, 0x20, 0x00, 0x00, 0xf0, 0xf8, 0x00, 0x38, 0x00, 0x00, 0xc0, 0x00, 0x3f, 0x80, 0x3f, 0xf0, 
+  0xfc, 0x00, 0x0e, 0x00, 0x00, 0x20, 0x00, 0x18, 0xff, 0x83, 0xf0, 0xfe, 0x00, 0x01, 0x80, 0x00, 
+  0x10, 0x00, 0x08, 0x00, 0x03, 0xf0, 0xff, 0x00, 0x00, 0xc0, 0x00, 0x08, 0x00, 0x04, 0x00, 0x07, 
+  0xf0, 0xff, 0x80, 0x00, 0x30, 0x00, 0x0c, 0x00, 0x06, 0x00, 0x0f, 0xf0, 0xff, 0xc0, 0x00, 0x08, 
+  0x00, 0x06, 0x00, 0x02, 0x00, 0x1f, 0xf0, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x02, 0x00, 0x03, 0x00, 
+  0x3f, 0xf0, 0xff, 0xf8, 0x00, 0x02, 0x00, 0x03, 0x00, 0x03, 0x00, 0xff, 0xf0, 0xff, 0xfc, 0x00, 
+  0x03, 0x00, 0x01, 0x00, 0x01, 0x01, 0xff, 0xf0, 0xff, 0xff, 0x00, 0x01, 0x80, 0x01, 0x80, 0x01, 
+  0x87, 0xff, 0xf0, 0xff, 0xff, 0xc0, 0x00, 0x80, 0x00, 0x80, 0x01, 0x9f, 0xff, 0xf0, 0xff, 0xff, 
+  0xf0, 0x00, 0xc0, 0x00, 0x80, 0x00, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xfe, 0x00, 0xc0, 0x00, 0xc0, 
+  0x03, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xff, 0xe0, 0x40, 0x00, 0xc0, 0x3f, 0xff, 0xff, 0xf0, 0xff, 
+  0xff, 0xff, 0xff, 0xc0, 0x00, 0xc7, 0xff, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
+  0xff, 0xff, 0xff, 0xff, 0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0
+};
 
 
 //*************************************************************************************
 //----------------------------------- Constants --------------------------------------
 //*************************************************************************************
-String string_date_sistema = "";
-String string_date_emergency = "";
-//------------------------------------   LCD -------------------------------------------
-U8X8_PCD8544_84X48_4W_HW_SPI u8x8(2, 4, 15); //spi (cs, dc, reset)  
-const int pinLcd = 26;
-int ledState = LOW; 
 
-String Longitud = "Lon.";  
-String Latitud = "Lat."; 
-String Radio = "RDS";  
-String Frecuencia = "Freq:"; 
-String Senal = "         Senal:";  
-String Mensaje = "Mensaje:";
+//------------------------------------   LCD -------------------------------------------
+ 
+int ledState = LOW; 
+ 
 
 //------------------------------------ Sirena ------------------------------------------
 volatile unsigned long time0_ALARM = 0;
+volatile unsigned long time0_update = 0;
 //sirena
 //#include "audio.h"
  
@@ -113,6 +142,7 @@ TaskHandle_t Task_for_RTC;
 TaskHandle_t Task_for_BT;
 TaskHandle_t Task_for_RDS;
  
+TaskHandle_t Task_for_INT;
 TaskHandle_t Task_for_display;
 TaskHandle_t Task_for_OTA;
 
@@ -142,30 +172,16 @@ void RDS_newfrequency  (float frequency)
 
   FREQ_RDS = float(frequency/10);
 
+  // guardamos en la eeprom
+  // llamamos semaforos
+  xSemaphoreTake(i2cMutex, portMAX_DELAY);
+  //frecuencia
+  EepromRTC.writeFloat(13,FREQ_RDS); 
+  xSemaphoreGive(i2cMutex);
+
+
 }
-
-void read_EEPROM(char letter)
-{
-  if (letter=='A')
-  {
-    //Leemos valores SASPE
-    // - Latitud
-    // - Longitud
-    // - Frecuencia_RDS
-    return;
-  }
-
-  else if (letter=='B')
-  {
-    //leemos un historico de datos
-
-    return;
-  }
-  else 
-  {
-    return ;
-  }
-}
+ 
 
 
 double vabs(double value)
@@ -209,7 +225,108 @@ void IRAM_ATTR my_interruption()
     }
 }
 
+void IRAM_ATTR button_interrupt()
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(Task_for_INT, 0, eNoAction, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken == pdTRUE) {
+        portYIELD_FROM_ISR();
+    }
 
+
+}
+
+
+void processINT_Function(void *pvParameters)
+{
+  while(1)
+  {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    startTime  = millis();
+
+    bool option1 = true;
+    bool option2 = true;
+    bool option3 = true;
+
+    Serial.println("Boton activado");
+
+    buttonState = digitalRead(buttonPin);
+
+    while (buttonState == LOW)
+    { 
+      buttonState = digitalRead(buttonPin);
+      
+      if (((millis()-startTime)>2.5*1000) && option1) 
+      {
+        //apagamos la alarma en caso esté prendido
+        Serial.println("Primer caso");
+
+        option1 = false;
+        time0_ALARM = 0;
+        vTaskSuspend(Task_for_sirena);
+
+      }
+
+      if (((millis()-startTime)>6.5*1000) && option2) 
+      {
+        //apagamos el BT 
+        Serial.println("Segundo caso");
+
+        option2 = false;
+        //emitimos un pitido 
+
+
+      // primer pitido
+        freq2=440;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=880;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=1320;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2200;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2500;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+      }
+
+      if (((millis()-startTime)>10*1000) && option3) 
+      {
+        //formateamos el ESP32
+        option3 = false;
+
+        //emitimos dos pitidos
+        
+      // primer pitido
+        freq2=440;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=880;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=1320;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2200;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2500;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+
+        vTaskDelay(pdMS_TO_TICKS(350));
+
+      // segundo pitido
+        freq2=440;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=880;ledcWrite(channel2,   freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=1320;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2200;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+        freq2=2500;ledcWrite(channel2,  freq2);vTaskDelay(pdMS_TO_TICKS(100));
+
+        //salimos porque no hay más opciones;
+        break;
+
+
+
+      }
+
+      vTaskDelay(pdMS_TO_TICKS(25));
+
+    
+
+    
+    }
+
+
+
+
+  }
+}
 
 void processRDS_Function(void *pvParameters) {
   while(1)
@@ -249,7 +366,7 @@ void processRDS_Function(void *pvParameters) {
         time0_ALARM = millis();
         vTaskResume(Task_for_sirena);
  
-        display_STATUS_GLOBAL = 'E';
+        display_STATUS_GLOBAL = 'E'; 
         //actualizamos LCD
       
       }
@@ -257,6 +374,7 @@ void processRDS_Function(void *pvParameters) {
       { 
         //Solo se displaya el LCD 
         time0_ALARM = millis();
+        vTaskSuspend(Task_for_sirena);
         display_STATUS_GLOBAL = 'E';
       }
       
@@ -316,20 +434,23 @@ void Task_for_sirena_function(void* parameter)
   
   while(1)
   {
-    
+ 
   if (!(millis() - time0_ALARM > 1000*60))
   { 
     digitalWrite(pinRelay, LOW);
+    digitalWrite(pinLcd, HIGH);
+
 
     display_STATUS_GLOBAL = 'E';
 
     freq2=440;
     ledcWrite(channel2, freq2);
     vTaskDelay(pdMS_TO_TICKS(100));
-
+    
     freq2=880;
     ledcWrite(channel2, freq2);
     vTaskDelay(pdMS_TO_TICKS(100));
+    digitalWrite(pinLcd, LOW);
 
     freq2=1320;
     ledcWrite(channel2, freq2);
@@ -338,6 +459,8 @@ void Task_for_sirena_function(void* parameter)
     freq2=2200;
     ledcWrite(channel2, freq2);
     vTaskDelay(pdMS_TO_TICKS(100));
+    digitalWrite(pinLcd, HIGH);
+
 
     freq2=2500;
     ledcWrite(channel2, freq2);
@@ -348,6 +471,8 @@ void Task_for_sirena_function(void* parameter)
   { 
     display_STATUS_GLOBAL = 'N';
     digitalWrite(pinRelay, HIGH);
+    digitalWrite(pinLcd,LOW);
+
     esp_task_wdt_reset();
     vTaskDelay(pdMS_TO_TICKS(10));
     // suspendemos la tarea
@@ -360,40 +485,50 @@ void Task_for_display_function(void* parameter)
 {
  
   //presentacion 
+  //logo 
   xSemaphoreTake(spiMutex, portMAX_DELAY);
   //----------------------------------------------
 
   {
-    int i = 0;
-  u8x8.setFont(u8x8_font_5x7_f); //   
-  //fondo blanco
-  u8x8.drawString(0,0,"           "); 
-  u8x8.setInverseFont(i);
-
-  //fondo oscuro
-  u8x8.drawString(0,1,"-----------");
-  u8x8.setInverseFont(i);
-  u8x8.drawString(0,2, "---SASPe---"); 
-  u8x8.setInverseFont(i);
-  u8x8.drawString(0,3,"-----------");
-  u8x8.setInverseFont(i);
-
-  //fondo blanco
-  u8x8.drawString(0,4,"          ");
-  u8x8.setInverseFont(i);
   
-  u8x8.refreshDisplay();   
+  //logo
+  display.clearDisplay();
+  display.drawBitmap(0, 0, bitmap_image, 84, 48, 1);
+  display.display();
  
   //---------------------------------------------------------
   xSemaphoreGive(spiMutex);
+  }
+  vTaskDelay(pdMS_TO_TICKS(1500));
+  //------------ Presentacion SASPe ----------------------//
+  xSemaphoreTake(spiMutex, portMAX_DELAY);
 
-  vTaskDelay(pdMS_TO_TICKS(2500));
-  esp_task_wdt_reset();
-   
+  
+  {
+  display.clearDisplay();
+  display.setRotation(rotationLcd);
+  display.setTextSize(1);
+  display.setTextColor(BLACK); 
+  display.setCursor(0,0);
+  display.println("");
+  display.setCursor(0,10);
+  display.println(middleDashes.c_str());
+  display.setCursor(0,20);
+  display.println(saspeMsg.c_str());
+  display.setCursor(0,30);
+  display.println(middleDashes.c_str());
+  display.setCursor(0,40);
+  display.println("");
+  display.display();
+  
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
 
   }
- 
+  
+  xSemaphoreGive(spiMutex);
+
   while(1)
   {
     xSemaphoreTake(spiMutex, portMAX_DELAY);
@@ -401,86 +536,112 @@ void Task_for_display_function(void* parameter)
     if (display_STATUS_GLOBAL == 'N')
     {
       // cargamos pantalla normal;
-
-
-
-      String sLongitud = Longitud + longitud_center;  
-
-
-      String sLatitud = Latitud + latitud_center; 
-      String sRadio = "Rds:" + String(process_rds.signal_RDS);  
-      String sFrecuencia = Frecuencia + String(FREQ_RDS); 
-
-
-      String sHora =   string_date_sistema;
-      //String sSenal = Senal + vSenal;
-      //String sMensaje = Mensaje + vMensaje;
       
-      u8x8.clear();
-      
-      u8x8.setFont(u8x8_font_5x7_f);
-      u8x8.drawString(0,0,"--Config---"); //Sistema de Alerta Sísmico Peruano - SASPe
-      u8x8.setInverseFont(0);//fondo oscuro
+      String o_t_msg = saspeMsg;
+      String o_t_time = string_date_LCD;  
+      String o_t_rds = rds_LCD + String(round(process_rds.signal_RDS))+"%"; 
+      String o_t_freq = freq_LCD + String(FREQ_RDS);  
+      String o_t_lo = lo_LCD + String(longitud_center);
+      String o_t_la = la_LCD + String(latitud_center); 
 
-      u8x8.drawString(0,1,sHora.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,2,sLongitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,3,sLatitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,4,sRadio.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-
-      u8x8.drawString(0,5,sFrecuencia.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.refreshDisplay();      
+      display.clearDisplay();
+      display.setRotation(rotationLcd);
+      display.setTextSize(1);
+      display.setTextColor(BLACK); 
+      display.setCursor(0,0);
+      display.println(o_t_msg.c_str());
+      display.setCursor(0,8);
+      display.println(o_t_time.c_str());
+      display.setCursor(0,16);
+      display.println(o_t_rds.c_str());
+      display.setCursor(0,24);
+      display.println(o_t_freq.c_str());
+      display.setCursor(0,32); 
+      display.println(o_t_lo.c_str());
+      display.setCursor(0,40);
+      display.println(o_t_la.c_str());
+      display.display();
    
     }
     if (display_STATUS_GLOBAL == 'U')
     {
-      // cargamos pantalla normal;
+      if ((millis() - time0_update > 1000*90))
+      {
+        //Seteamos a operación normal cuando se acabe el evento
+        display_STATUS_GLOBAL = 'N';
+        time0_update = 0;
+        digitalWrite(pinLcd,LOW);
+      }
+      digitalWrite(pinLcd,HIGH);
 
+      String o_t_msg = updateMsg;
+      String o_t_time = string_date_LCD;  
+      String o_t_rds = rds_LCD + String(round(process_rds.signal_RDS))+"%"; 
+      String o_t_freq = freq_LCD + String(FREQ_RDS);  
+      String o_t_lo = lo_LCD + String(longitud_center);
+      String o_t_la = la_LCD + String(latitud_center); 
 
-
-      String sLongitud = Longitud + longitud_center;  
-
-
-      String sLatitud = Latitud + latitud_center; 
-      String sRadio = "Rds:" + String(process_rds.signal_RDS);  
-      String sFrecuencia = Frecuencia + String(FREQ_RDS); 
-
-
-      String sHora =   string_date_sistema;
- 
-      
-      u8x8.clear();
-      
-      u8x8.setFont(u8x8_font_5x7_f);
-      u8x8.drawString(0,0,"--Updating--"); //Sistema de Alerta Sísmico Peruano - SASPe
-      u8x8.setInverseFont(0);//fondo oscuro
-
-      u8x8.drawString(0,1,sHora.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,2,sLongitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,3,sLatitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,4,sRadio.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-
-      u8x8.drawString(0,5,sFrecuencia.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.refreshDisplay();      
-   
+      display.clearDisplay();
+      display.setRotation(rotationLcd);
+      display.setTextSize(1);
+      display.setTextColor(BLACK); 
+      display.setCursor(0,0);
+      display.println(o_t_msg.c_str());
+      display.setCursor(0,8);
+      display.println(o_t_time.c_str());
+      display.setCursor(0,16);
+      display.println(o_t_rds.c_str());
+      display.setCursor(0,24);
+      display.println(o_t_freq.c_str());
+      display.setCursor(0,32); 
+      display.println(o_t_lo.c_str());
+      display.setCursor(0,40);
+      display.println(o_t_la.c_str());
+      display.display();
+      // cargamos pantalla UPDATE;
     }
+    if (display_STATUS_GLOBAL == 'V')
+    {
+      //LCD Event
+      if ((millis() - time0_ALARM > 1000*60))
+      {
+        //Seteamos a operación normal cuando se acabe el evento
+        display_STATUS_GLOBAL = 'N';
+      }
+        String e_t_msg = alertMsg;
+        String e_t_time = string_date_LCD_emergency; 
+        String e_t_lo = lo_LCD + String(longitud_emergency);
+        String e_t_la = la_LCD + String(latitud_emergency); 
+        String e_t_alertRad = rad_LCD + String(radio_emergency); 
+
+
+        display.clearDisplay();
+        display.setRotation(rotationLcd);
+        display.setTextSize(1);
+
+        display.setTextColor(BLACK); 
+        display.setCursor(0,0);
+        display.println(e_t_msg.c_str());
+        display.setCursor(0,8); 
+        display.println("");
+        display.setCursor(0,16);
+        display.println(e_t_time.c_str());
+        display.setCursor(0,24); 
+        display.println(e_t_lo.c_str());
+        display.setCursor(0,32); 
+        display.println(e_t_la.c_str());
+        display.setCursor(0,40);
+        display.println(e_t_alertRad.c_str());
+        display.display();
+
+
+        
+
+    }
+
+   
+   
+    
     if ((display_STATUS_GLOBAL == 'E') )
     {
       //emergencia
@@ -489,33 +650,32 @@ void Task_for_display_function(void* parameter)
         //Seteamos a operación normal cuando se acabe el evento
         display_STATUS_GLOBAL = 'N';
       }
+        String e_t_msg = eventMsg;
+        String e_t_time = string_date_LCD_emergency; 
+        String e_t_lo = lo_LCD + String(longitud_emergency);
+        String e_t_la = la_LCD + String(latitud_emergency); 
+        String e_t_alertRad = rad_LCD + String(radio_emergency); 
 
-      String oMensaje = "--ALERTA!--";   
-      String sEvento = string_date_emergency;
-      String oRds = "Rad A.: " +String(radio_emergency); 
-      String oLongitud = "Lon: " + String(longitud_emergency);  
-      String oLatitud = "Lat: " + String(latitud_emergency); 
       
-      u8x8.setFont(u8x8_font_5x7_f);
-      u8x8.drawString(0,0,oMensaje.c_str()); 
-      u8x8.setInverseFont(0);//fondo oscuro
 
-      u8x8.drawString(0,1,"-----------");
-      u8x8.setInverseFont(0);//fondo blanco
+        display.clearDisplay();
+        display.setRotation(rotationLcd);
+        display.setTextSize(1);
 
-      u8x8.drawString(0,2,sEvento.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-
-      u8x8.drawString(0,3,oRds.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,4,oLongitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-      
-      u8x8.drawString(0,5,oLatitud.c_str());
-      u8x8.setInverseFont(0);//fondo blanco
-
-      u8x8.refreshDisplay();   
+        display.setTextColor(BLACK); 
+        display.setCursor(0,0);
+        display.println(e_t_msg.c_str());
+        display.setCursor(0,8); 
+        display.println("");
+        display.setCursor(0,16);
+        display.println(e_t_time.c_str());
+        display.setCursor(0,24); 
+        display.println(e_t_lo.c_str());
+        display.setCursor(0,32); 
+        display.println(e_t_la.c_str());
+        display.setCursor(0,40);
+        display.println(e_t_alertRad.c_str());
+        display.display();
       
     }
     //----------------------------------------------------------------------------//
@@ -591,6 +751,7 @@ void processBT_Function(void * parameter){
           bool flag = check_event(radio_emergency,latitud_emergency, longitud_emergency);
           
           string_date_emergency = string_date_sistema;
+          string_date_LCD_emergency = string_date_LCD;
 
           process_rds.EMERGENCY_SIGNAL = false;
 
@@ -611,6 +772,8 @@ void processBT_Function(void * parameter){
 
 
             display_STATUS_GLOBAL = 'E';
+            vTaskSuspend(Task_for_sirena);
+
           }
           
         }
@@ -652,6 +815,8 @@ void processBT_Function(void * parameter){
  
 
         RDS_newfrequency(value.toFloat());
+
+
       }
 
       else if (data.indexOf("new_latlon")!=-1)
@@ -669,6 +834,14 @@ void processBT_Function(void * parameter){
 
         latitud_center = atof(lat.c_str());
         longitud_center = atof(lon.c_str());
+
+
+        // guardamos en la eeprom
+        xSemaphoreTake(i2cMutex, portMAX_DELAY);
+        //frecuencia
+        EepromRTC.writeFloat(1,latitud_center); 
+        EepromRTC.writeFloat(5,longitud_center); 
+        xSemaphoreGive(i2cMutex);
  
         
  
@@ -687,6 +860,7 @@ void processBT_Function(void * parameter){
       }
       else if (data.indexOf("ALARM_test_OFF")!=-1)
       {
+        time0_ALARM = 0;
         vTaskSuspend(Task_for_sirena);
         display_STATUS_GLOBAL = 'N';
         digitalWrite(pinRelay, HIGH);
@@ -713,7 +887,31 @@ void processBT_Function(void * parameter){
       {
         //actualizamos por OTA
         display_STATUS_GLOBAL =  'U';
+        time0_update = millis();
+        //deshabilitamos todas las tareas
+        // pausamos todas las tareas 
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        vTaskSuspend(Task_for_sirena);
+        vTaskSuspend(Task_for_RDS);
+        vTaskSuspend(Task_for_display);
+        vTaskSuspend(Task_for_RTC);
+
+        vTaskDelay(pdMS_TO_TICKS(200));
+        //apagamos el BT
+        SerialBT.end();
+        // desactivamos el bit de interrupcion
+        detachInterrupt(GPIO2_Si);
+
         xTaskNotifyGive(Task_for_OTA);
+        vTaskSuspend(NULL);
+
+      }
+
+      else if (data.indexOf("version")!=-1)
+      {
+        writeSerialBT(String(VERSION_CODE));
       }
       else 
       {
@@ -894,9 +1092,9 @@ void processRTC_Function(void * pvParameters)
 
  
 
-    string_date_sistema = String(year) + "/"+String(month) + "/" + String(dayOfMonth) + "  " + String(hour) + ":" + String(minute) + ":"+String((int)second);;
+    string_date_sistema = String(year) + "/"+String(month) + "/" + String(dayOfMonth) + "  " + String(hour) + ":" + String(minute) + ":"+String((int)second);
   
-
+    string_date_LCD = String(year) + "/"+String(month) + "/" + String(dayOfMonth) + "  " + String(hour) + ":" + String(minute);
   
     vTaskDelay(pdMS_TO_TICKS(0.5*1000));
     esp_task_wdt_reset();
@@ -909,12 +1107,24 @@ void processRTC_Function(void * pvParameters)
 //-------------------------------------- Setup ----------------------------------------
 //*************************************************************************************
 void setup()
-{ 
+{
+  Wire.begin();
   //------------------------------ Interrupcion -----------------------------------
  
   pinMode(GPIO2_Si, INPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
 
-  //------------------------------- Lectura de variables SASPe----------------------
+  //------------------------------- Lectura de variablE EEPROM ----------------------
+  latitud_center = EepromRTC.readFloat(1);
+  longitud_center = EepromRTC.readFloat(5);
+  NUMBER_DEVICE = (int)EepromRTC.readFloat(9);
+  FREQ_RDS = (float)EepromRTC.readFloat(13);
+
+  EepromRTC.readChars(17,NUMBER_DEVICE_ID,30);
+  
+
+  device_name = device_name + String(NUMBER_DEVICE);
+  //---------------------------------------------------------------------------------
  
   //read_EEPROM('A');
   //configuramos wdt
@@ -927,19 +1137,45 @@ void setup()
   SerialBT.begin(device_name); //Bluetooth device name
   
   //---------------------------------Nokia 5110 Display---------------------
-  u8x8.begin();
-  u8x8.setPowerSave(0);
-  pinMode(pinLcd,OUTPUT);
+  display.begin();
 
-  //Nokia 5110 Display            
+  display.setContrast(50);
+  display.clearDisplay();
+  pinMode(pinLcd, OUTPUT);
+
+  //Pantalla apagada
+  digitalWrite(pinLcd,LOW);
+
+
+
+          
   //---------------------------------------Sirena--------------------------------
   ledcAttachPin(pinAudio2, channel2);
   ledcSetup(channel2, freq2, resolution2);
- 
+    digitalWrite(pinLcd, HIGH);
+
+  // pitido inicial
+    freq2=440;ledcWrite(channel2, freq2);delay(100);
+    
+    freq2=880;ledcWrite(channel2, freq2);delay(100);
+    
+    digitalWrite(pinLcd, LOW);
+
+    freq2=1320;ledcWrite(channel2, freq2);delay(100);
+  
+    freq2=2200;digitalWrite(pinLcd, HIGH);ledcWrite(channel2, freq2);delay(100);
+
+
+
+    freq2=2500;ledcWrite(channel2, freq2);digitalWrite(pinLcd, LOW);
+
+    delay(100);
+    
   //-----------------------------------Radio Si4703-----------------------------
   radio.powerOn();
   radio.setVolume(volumen);
-  radio.setChannel(FREQ_RDS*10);
+  float value = FREQ_RDS*10.0;
+  radio.setChannel(value);
 
   //----------------------------------Relay----------------------------------------
   pinMode(pinRelay, OUTPUT_OPEN_DRAIN);
@@ -953,26 +1189,27 @@ void setup()
   spiMutex = xSemaphoreCreateMutex();
   //---------------------------------- xTasks--------------------------------------
  
-  xTaskCreatePinnedToCore(Task_for_sirena_function, "sirena", 6500, NULL, 3, &Task_for_sirena,0);
+  xTaskCreatePinnedToCore(Task_for_sirena_function, "sirena", 5000, NULL, 3, &Task_for_sirena,0);
   vTaskSuspend(Task_for_sirena);
 
   xTaskCreatePinnedToCore(Task_for_display_function, "display", 4000, NULL, 2, &Task_for_display,0);
-  xTaskCreatePinnedToCore(Task_for_OTAUpdate_function, "OTA_Update", 16000, NULL,5 , &Task_for_OTA,0);
+  xTaskCreatePinnedToCore(Task_for_OTAUpdate_function, "OTA_Update", 20000, NULL,5 , &Task_for_OTA,0);
 
   delay(200);
 
  
  
   xTaskCreatePinnedToCore(processBT_Function, "BT", 10000, NULL, 6, &Task_for_BT,1);
-  xTaskCreatePinnedToCore(processRTC_Function, "RTC", 3000, NULL, 1, &Task_for_RTC,1);
-
+  xTaskCreatePinnedToCore(processRTC_Function, "RTC", 3000, NULL, 3, &Task_for_RTC,1);
+  xTaskCreatePinnedToCore(processINT_Function, "button", 4000, NULL, 1, &Task_for_INT,1);
   xTaskCreatePinnedToCore(processRDS_Function, "RDS", 4000, NULL, 4, &Task_for_RDS,1);
  
   //gpio_install_isr_service(0);
   //gpio_isr_handler_add(INTERRUPT_PIN, my_interruption, NULL);
   attachInterrupt(GPIO2_Si, my_interruption, FALLING);
+  attachInterrupt(buttonPin, button_interrupt, FALLING);
 
-  delay(200);    
+  delay(150);    
 }
 
 void loop(){}

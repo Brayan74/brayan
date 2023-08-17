@@ -6,7 +6,7 @@
 BluetoothSerial SerialBT;
 
 
-String device_name = "SASPe_ROJ";
+
 String bluetoothReadLine(){
     String text_received = "";
     while(SerialBT.available()){

@@ -66,8 +66,8 @@ void Task_for_OTAUpdate_function(void *pvParameters)
 { 
   while (1)
   {
-
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  
   esp_task_wdt_init(WDT_TIMEOUT, true);  
 
   WiFi.begin(ssid, password);
@@ -85,7 +85,7 @@ void Task_for_OTAUpdate_function(void *pvParameters)
       flag_wifi = false;
       break;
     }
-    delay(200);
+    delay(50);
     }
   if (flag_wifi==true)
   {
@@ -95,7 +95,10 @@ void Task_for_OTAUpdate_function(void *pvParameters)
     Serial.println("Starting OTA");
     HttpsOTA.begin(url, server_certificate); 
     otastatus = HttpsOTA.status();
+    Serial.println("LLegamos aqui");
 
+    unsigned long var = millis();
+    while(millis()-var < 120*1000){
     if(otastatus == HTTPS_OTA_SUCCESS) 
     { 
         Serial.println("Firmware written successfully. To reboot device, call API ESP.restart() or PUSH restart button on device");
@@ -106,12 +109,24 @@ void Task_for_OTAUpdate_function(void *pvParameters)
         Serial.println("Firmware Upgrade Fail");
         display_STATUS_GLOBAL = 'N'; 
         delay(10);
-        WiFi.disconnect();
+        WiFi.disconnect(true);
+        ESP.restart();
+    
+
     }
+
+    esp_task_wdt_reset();
+    delay(10);
+    
   }
+  Serial.println("Se excedió el tiempo de respuesta. Reiniciando ...");
+  ESP.restart();
+  }
+
   else
   {
     Serial.println("No se pudo conectar al wifi");
+    ESP.restart();
   }
   }
   

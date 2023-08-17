@@ -2,6 +2,8 @@
 #define DS3231_I2C_ADDRESS 0x68
 #define AT24C32_I2C_ADDRESS 0x57
 #include "esp_task_wdt.h"
+ 
+
 
 // si4703 i2c dirección es 0x10
 
